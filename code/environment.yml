@@ -1,0 +1,17 @@
+name: PS_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy
+  - scipy
+  - matplotlib
+  - pandas
+  - ipykernel
+  - pip
+  - pip:
+      - jax==0.9.2
+      - jaxlib==0.9.2
+      - blackjax==1.4
+      - optax==0.2.8
