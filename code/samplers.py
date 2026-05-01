@@ -233,6 +233,29 @@ def _compute_posterior_moments_from_particles(
     return f1, f2
 
 
+def _coordinate_specific_summaries(
+    posterior_mean: np.ndarray,
+    posterior_second_moment: np.ndarray,
+) -> dict[str, float]:
+    # coordinate-specific summaries for shifted Gaussian mixture target.
+    posterior_mean_first_coord = float(posterior_mean[0])
+    posterior_second_moment_first_coord = float(posterior_second_moment[0])
+
+    if posterior_mean.shape[0] > 1:
+        posterior_mean_rest_coords_mean = float(np.mean(posterior_mean[1:]))
+        posterior_second_moment_rest_coords_mean = float(np.mean(posterior_second_moment[1:]))
+    else:
+        posterior_mean_rest_coords_mean = np.nan
+        posterior_second_moment_rest_coords_mean = np.nan
+
+    return {
+        "posterior_mean_first_coord": posterior_mean_first_coord,
+        "posterior_second_moment_first_coord": posterior_second_moment_first_coord,
+        "posterior_mean_rest_coords_mean": posterior_mean_rest_coords_mean,
+        "posterior_second_moment_rest_coords_mean": posterior_second_moment_rest_coords_mean,
+    }
+
+
 def _normalize_weights(weights: jnp.ndarray) -> jnp.ndarray:
     w = jnp.asarray(weights, dtype=jnp.float32)
     return w / jnp.sum(w)
@@ -435,6 +458,7 @@ def _run_ps_generic_once(
     final_state = blackjax.persistent_sampling.remove_padding(state)
     final_particles = np.asarray(final_state.particles)
     posterior_mean, posterior_second_moment = _compute_posterior_moments_from_particles(final_particles)
+    coordinate_summaries = _coordinate_specific_summaries(posterior_mean, posterior_second_moment)
 
     final_ess = float(ess_path[-1]) if len(ess_path) > 0 else np.nan
     acceptance_array = np.asarray(acceptance_path, dtype=float)
@@ -458,6 +482,11 @@ def _run_ps_generic_once(
         ),
         "posterior_mean": posterior_mean,
         "posterior_second_moment": posterior_second_moment,
+        "posterior_mean_first_coord": coordinate_summaries["posterior_mean_first_coord"],
+        "posterior_second_moment_first_coord": coordinate_summaries["posterior_second_moment_first_coord"],
+        "posterior_mean_rest_coords_mean": coordinate_summaries["posterior_mean_rest_coords_mean"],
+        "posterior_second_moment_rest_coords_mean": coordinate_summaries["posterior_second_moment_rest_coords_mean"],
+        "particles": final_particles,
         "final_ess": final_ess,
         "acceptance_rate_mean": acceptance_rate_mean,
         "acceptance_rate_last": acceptance_rate_last,
@@ -645,6 +674,7 @@ def _run_ps_generic_once_with_inner_adaptation(
     final_state = blackjax.persistent_sampling.remove_padding(state)
     final_particles = np.asarray(final_state.particles)
     posterior_mean, posterior_second_moment = _compute_posterior_moments_from_particles(final_particles)
+    coordinate_summaries = _coordinate_specific_summaries(posterior_mean, posterior_second_moment)
 
     final_ess = float(ess_path[-1]) if len(ess_path) > 0 else np.nan
     acceptance_array = np.asarray(acceptance_path, dtype=float)
@@ -662,6 +692,11 @@ def _run_ps_generic_once_with_inner_adaptation(
         "logZ": float(final_state.log_Z),
         "posterior_mean": posterior_mean,
         "posterior_second_moment": posterior_second_moment,
+        "posterior_mean_first_coord": coordinate_summaries["posterior_mean_first_coord"],
+        "posterior_second_moment_first_coord": coordinate_summaries["posterior_second_moment_first_coord"],
+        "posterior_mean_rest_coords_mean": coordinate_summaries["posterior_mean_rest_coords_mean"],
+        "posterior_second_moment_rest_coords_mean": coordinate_summaries["posterior_second_moment_rest_coords_mean"],
+        "particles": final_particles,
         "final_ess": final_ess,
         "acceptance_rate_mean": acceptance_rate_mean,
         "acceptance_rate_last": acceptance_rate_last,
@@ -718,6 +753,7 @@ def run_ps_rwm_once(
             return blackjax.rmh.init(position, logdensity_fn)
 
         def step_fn(keys, states, logdensity_fn, kernel_params):
+            
             def one(key, state):
                 transition_generator = blackjax.mcmc.random_walk.normal(
                     _proposal_sqrt_from_cov(kernel_params["proposal_cov"], kernel_params["rw_scale"])
@@ -1623,6 +1659,7 @@ def run_ps_mclmc_once(
     final_state = blackjax.persistent_sampling.remove_padding(state)
     final_particles = np.asarray(final_state.particles)
     posterior_mean, posterior_second_moment = _compute_posterior_moments_from_particles(final_particles)
+    coordinate_summaries = _coordinate_specific_summaries(posterior_mean, posterior_second_moment)
 
     final_ess = float(ess_path[-1]) if len(ess_path) > 0 else np.nan
     acceptance_array = np.asarray(acceptance_path, dtype=float)
@@ -1640,6 +1677,11 @@ def run_ps_mclmc_once(
         "logZ": float(final_state.log_Z),
         "posterior_mean": posterior_mean,
         "posterior_second_moment": posterior_second_moment,
+        "posterior_mean_first_coord": coordinate_summaries["posterior_mean_first_coord"],
+        "posterior_second_moment_first_coord": coordinate_summaries["posterior_second_moment_first_coord"],
+        "posterior_mean_rest_coords_mean": coordinate_summaries["posterior_mean_rest_coords_mean"],
+        "posterior_second_moment_rest_coords_mean": coordinate_summaries["posterior_second_moment_rest_coords_mean"],
+        "particles": final_particles,
         "final_ess": final_ess,
         "acceptance_rate_mean": acceptance_rate_mean,
         "acceptance_rate_last": acceptance_rate_last,

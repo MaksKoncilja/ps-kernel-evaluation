@@ -88,43 +88,51 @@ def standardize_columns(X: Array) -> Array:
 def make_gaussian_mixture_target(dimension: int) -> Target:
     # Jakob proposed first test to be a Gaussian mixture with:
     # prior  : Uniform[-4 sqrt(D), 4 sqrt(D)]^D
-    # likelihood: (1/3) N(0, I) + (2/3) N(sqrt(D) * 1, 0.5 I)
+    # likelihood: (1/3) N(0, I) + (2/3) N((sqrt(D), 0, ..., 0), 0.5 I)
     d = int(dimension)
     if d <= 0:
         raise ValueError(f"Gaussian mixture target requires a positive dimension, got dimension={dimension}.")
 
     bound = 4.0 * jnp.sqrt(float(d))
     mean1 = jnp.zeros(d)
-    mean2 = jnp.sqrt(float(d)) * jnp.ones(d)
+    mean2 = jnp.zeros(d)
+    mean2 = mean2.at[0].set(jnp.sqrt(float(d)))
     mixture_weights = jnp.array([1.0 / 3.0, 2.0 / 3.0])
 
+    @jax.jit
     def log_prior_fn(theta: Array) -> Array:
         # pi(theta) = U[-bound, bound]^{D}
         return uniform_box_logpdf(theta, bound)
 
+    @jax.jit
     def log_likelihood_fn(theta: Array) -> Array:
-        # seting up (1/3) N(0, I) + (2/3) N(sqrt(D) * 1, 0.5 I)
+        # seting up (1/3) N(0, I) + (2/3) N((sqrt(D), 0, ..., 0), 0.5 I)
         log_prob1 = log_gaussian_diag(theta, mean1, 1.0)
         log_prob2 = log_gaussian_diag(theta, mean2, 0.5)
         return jax.scipy.special.logsumexp(jnp.stack([log_prob1, log_prob2], axis=-1), axis=-1, b=mixture_weights)
 
+    @jax.jit
     def log_posterior_fn(theta: Array) -> Array:
         # posterior \propto likelihood * prior
         return log_prior_fn(theta) + log_likelihood_fn(theta)
 
+    @jax.jit(static_argnums=1)
     def sample_prior_fn(key: jax.Array, num_samples: int) -> Array:
         # to sample particles form the prior U[-bound, bound]^D
         return sample_uniform_box(key, num_samples, d, bound)
 
     # These exact formulas are for the Gaussian mixture itself.
     # Because your prior is truncated uniform, they are approximate sanity checks,
+    @jax.jit
     def posterior_mean_reference_fn() -> Array:
         return (1.0 / 3.0) * mean1 + (2.0 / 3.0) * mean2
 
+    @jax.jit
     def posterior_second_moment_reference_fn() -> Array:
         # E[X^2] = const * (mean^2 + var)
         second1 = jnp.ones(d) * 1.0
-        second2 = jnp.ones(d) * (0.5 + float(d))
+        second2 = 0.5 * jnp.ones(d)
+        second2 = second2.at[0].set(0.5 + float(d))
         return (1.0 / 3.0) * second1 + (2.0 / 3.0) * second2
 
     return Target(  name="gaussian_mixture",

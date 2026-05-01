@@ -175,6 +175,7 @@ def adaptive_loop_with_rwm_adaptation(  key,
         # apply one RWMH step to every particle in parallel
         transition_generator = blackjax.mcmc.random_walk.normal(_proposal_sqrt_from_cov(proposal_cov, rw_scale))
         return base_rmh_kernel(rng_key, mcmc_state, logdensity_fn, transition_generator=transition_generator,)
+    
     vmapped_rmh_init = jax.vmap( lambda position, logdensity_fn: blackjax.rmh.init(position, logdensity_fn), in_axes=(0, None),)
     vmapped_rmh_step = jax.vmap(rmh_step_fn, in_axes=(0, 0, None, None, None))
     while float(state.tempering_param) < 1.0 and n_iter < max_iterations:
@@ -465,6 +466,17 @@ def run_reference_sampler_once( dimension: int,
 
     particles = np.array(smc_final_state.particles)
     f1, f2 = compute_posterior_moments_from_particles(particles)
+
+    # coordinate-specific summaries for shifted Gaussian mixture target.
+    f1_first_coord = float(f1[0])
+    f2_first_coord = float(f2[0])
+    if true_dimension > 1:
+        f1_rest_mean = float(np.mean(f1[1:]))
+        f2_rest_mean = float(np.mean(f2[1:]))
+    else:
+        f1_rest_mean = np.nan
+        f2_rest_mean = np.nan
+
     ess_path = np.asarray(diagnostics["ess_path"], dtype=float)
     acceptance_path = np.asarray(diagnostics["acceptance_path"], dtype=float)
     final_ess = float(ess_path[-1]) if ess_path.size > 0 else np.nan
@@ -477,10 +489,16 @@ def run_reference_sampler_once( dimension: int,
             "logZ": float(diagnostics["final_logZ"]),
             "posterior_mean": f1,
             "posterior_second_moment": f2,
+            "posterior_mean_first_coord": f1_first_coord,
+            "posterior_second_moment_first_coord": f2_first_coord,
+            "posterior_mean_rest_coords_mean": f1_rest_mean,
+            "posterior_second_moment_rest_coords_mean": f2_rest_mean,
             "n_iter": int(n_iter),
             "runtime_sec": float(runtime_sec),
             "final_ess": final_ess,
             "acceptance_rate_mean": acceptance_rate_mean, }
+    
+    out["particles"] = particles
 
     if kernel_name == "rwm":
         out["final_rw_scale"] = float(diagnostics["final_rw_scale"])
